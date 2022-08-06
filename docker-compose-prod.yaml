@@ -1,0 +1,63 @@
+version: "3.3"
+services:
+  proxy:
+    image: nginx:1.23.1-alpine
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./staticfiles:/app/prod/etpph/staticfiles
+      - ./media:/app/prod/etpph/media
+    container_name: nginx_prod
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "80:80"
+    links:
+      - app
+
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/django_prod.dockerfile
+    volumes:
+      - .:/app/prod/etpph
+    env_file: ./docker/.env 
+    image: etpph:prod
+    container_name: etpph_prod
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    command: sh -c "python manage.py collectstatic --noinput &&
+                    gunicorn tenagapengajar.asgi:application --bind 0.0.0.0:8080  --workers 5 -k uvicorn.workers.UvicornWorker"
+    links:
+      - db
+    depends_on:
+      - db
+
+  db:
+    image: 'postgres:14.4-alpine3.16'
+    env_file: ./docker/.env
+    hostname: db_postgress
+    container_name: db_postgress
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - './database/data:/var/lib/postgresql/data'
+
+  redis:
+    hostname: redis_dev
+    image: redis:7.0.4-alpine3.16
+    command: redis-server --requirepass etpphredis
+    container_name: redis_dev
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet:  192.168.4.0/24
